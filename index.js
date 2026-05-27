@@ -521,6 +521,66 @@ async function S7_PROCESS_QUEUE() {
 
 })();
 
+const S7_START_TIME = Date.now();
+
+S7HaTeSY_APP.get("/", async (req, res) => {
+
+    const S7_UPTIME_SECONDS =
+        Math.floor(
+            (Date.now() - S7_START_TIME) / 1000
+        );
+
+    const S7_HOURS =
+        Math.floor(S7_UPTIME_SECONDS / 3600);
+
+    const S7_MINUTES =
+        Math.floor(
+            (S7_UPTIME_SECONDS % 3600) / 60
+        );
+
+    const S7_SECONDS =
+        S7_UPTIME_SECONDS % 60;
+
+    res.json({
+        status: "online",
+
+        service: "S7 Info Bridge",
+
+        developer: {
+            name: "SABIR7718"
+        },
+
+        uptime: {
+            seconds: S7_UPTIME_SECONDS,
+            formatted:
+                `${S7_HOURS}h ${S7_MINUTES}m ${S7_SECONDS}s`,
+        },
+
+        usage: {
+            number_lookup:
+                "/search?type=num&query=919876543210",
+
+            telegram_lookup:
+                "/search?type=tg&query=username",
+        },
+
+        queue: {
+            pending: SABIR7718_QUEUE.length,
+            processing:
+                S7_ACTIVE_REQUEST
+                    ? true
+                    : false,
+        },
+
+        server: {
+            port: S7_PORT,
+            node: process.version,
+        }
+        
+    });
+    
+});
+
 if (process.env.URL) {
 
     (async () => {
