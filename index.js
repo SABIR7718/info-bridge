@@ -50,7 +50,7 @@ const S7_PORT = process.env.PORT || 3000;
 
 const S7_TARGET_BOT = process.env.BOT_USERNAME;
 
-const SYHaTe_SESSION = new StringSession( process.env.SESSION_STRING || "" );
+const SYHaTe_SESSION = new StringSession(process.env.SESSION_STRING || "");
 
 const HaTe_READLINE = readline.createInterface({
     input: process.stdin,
@@ -74,9 +74,7 @@ let S7_QUEUE_LOCK = false;
 function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
 
     const SABIR7718_RECORDS = [];
-
     let S7_TG_BLOCK = "";
-
     let S7_INTEL_BLOCK = "";
 
     const HaTe_COMBINED_TEXT =
@@ -109,37 +107,20 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
         S7_INTEL_BLOCK &&
         S7_INTEL_BLOCK.includes("RECORD")
     ) {
-
-        const SYHaTe_BLOCKS =
-            S7_INTEL_BLOCK.split(/🔴\s*RECORD\s*\d+/i);
+        const SYHaTe_BLOCKS = S7_INTEL_BLOCK.split(/^.*──\s*RECORD\s*\d+\s*──.*$/im);
 
         for (let S7_INDEX = 1; S7_INDEX < SYHaTe_BLOCKS.length; S7_INDEX++) {
-
             const HaTe_BLOCK = SYHaTe_BLOCKS[S7_INDEX];
 
-            const S7_NAME =
-                HaTe_BLOCK.match(/👤\s*Name\s*:\s*(.*)/i);
-
-            const S7_FATHER =
-                HaTe_BLOCK.match(/👨\s*Father\s*:\s*(.*)/i);
-
-            const S7_ADDRESS =
-                HaTe_BLOCK.match(/📍\s*Address\s*:\s*(.*)/i);
-
-            const S7_CIRCLE =
-                HaTe_BLOCK.match(/📡\s*Circle\s*:\s*(.*)/i);
-
-            const S7_ALT =
-                HaTe_BLOCK.match(/☎️\s*Alt\s*:\s*(.*)/i);
-
-            const S7_AADHAAR =
-                HaTe_BLOCK.match(/🆔\s*Aadhar\s*:\s*(.*)/i);
-
-            const S7_EMAIL =
-                HaTe_BLOCK.match(/✉️\s*Email\s*:\s*(.*)/i);
+            const S7_NAME = HaTe_BLOCK.match(/👤\s*Name\s*:\s*(.*)/i);
+            const S7_FATHER = HaTe_BLOCK.match(/👨\s*Father\s*:\s*(.*)/i);
+            const S7_ADDRESS = HaTe_BLOCK.match(/📍\s*Address\s*:\s*(.*)/i);
+            const S7_CIRCLE = HaTe_BLOCK.match(/📡\s*Circle\s*:\s*(.*)/i);
+            const S7_ALT = HaTe_BLOCK.match(/☎️\s*Alt\s*:\s*(.*)/i);
+            const S7_AADHAAR = HaTe_BLOCK.match(/🆔\s*Aadhar\s*:\s*(.*)/i);
+            const S7_EMAIL = HaTe_BLOCK.match(/✉️\s*Email\s*:\s*(.*)/i);
 
             if (S7_NAME) {
-
                 let SABIR7718_ADDRESS =
                     S7_ADDRESS ?
                     S7_ADDRESS[1]
@@ -156,26 +137,21 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
                 SABIR7718_RECORDS.push({
                     name: S7_NAME[1].trim(),
                     father_name: S7_FATHER ?
-                        S7_FATHER[1].trim() :
-                        "N/A",
+                        S7_FATHER[1].trim() : "N/A",
 
                     address: SABIR7718_ADDRESS,
 
                     circle: S7_CIRCLE ?
-                        S7_CIRCLE[1].trim() :
-                        "N/A",
+                        S7_CIRCLE[1].trim() : "N/A",
 
                     alt_number: S7_ALT ?
-                        S7_ALT[1].trim() :
-                        "N/A",
+                        S7_ALT[1].trim() : "N/A",
 
                     aadhaar_masked: S7_AADHAAR ?
-                        S7_AADHAAR[1].trim() :
-                        "N/A",
+                        S7_AADHAAR[1].trim() : "N/A",
 
                     email: S7_EMAIL ?
-                        S7_EMAIL[1].trim() :
-                        "N/A",
+                        S7_EMAIL[1].trim() : "N/A",
                 });
             }
         }
@@ -191,40 +167,18 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
         )
     ) {
 
-        const S7_TG_ID =
-            S7_TG_BLOCK.match(
-                /📡\s*Telegram ID\s*:\s*(\d+)/i
-            );
-
-        const S7_USERNAME =
-            S7_TG_BLOCK.match(
-                /💻\s*Username\s*:\s*@?([^\n\s]+)/i
-            );
-
-        const S7_PHONE =
-            S7_TG_BLOCK.match(
-                /📞\s*Number\s*:\s*(\d+)/i
-            );
+        const S7_TG_ID = S7_TG_BLOCK.match(/📡\s*Telegram ID\s*:\s*(\d+)/i);
+        const S7_USERNAME = S7_TG_BLOCK.match(/💻\s*Username\s*:\s*@?([^\n\s]+)/i);
+        const S7_PHONE = S7_TG_BLOCK.match(/📞\s*Number\s*:\s*(\d+)/i);
 
         S7_TG_INFO = {
-            telegram_id: S7_TG_ID ?
-                S7_TG_ID[1].trim() :
-                "N/A",
-
-            username: S7_USERNAME ?
-                S7_USERNAME[1].trim() :
-                "N/A",
-
-            phone: S7_PHONE ?
-                S7_PHONE[1].trim() :
-                "N/A",
+            telegram_id: S7_TG_ID ? S7_TG_ID[1].trim() : "N/A",
+            username: S7_USERNAME ? S7_USERNAME[1].trim() : "N/A",
+            phone: S7_PHONE ? S7_PHONE[1].trim() : "N/A",
         };
     }
 
-    if (
-        SABIR7718_RECORDS.length === 0 &&
-        !S7_TG_INFO
-    ) {
+    if (SABIR7718_RECORDS.length === 0 && !S7_TG_INFO) {
         return null;
     }
 
@@ -238,6 +192,7 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
         owner: "SABIR7718",
     };
 }
+
 
 async function S7_PROCESS_QUEUE() {
 
@@ -552,33 +507,29 @@ S7HaTeSY_APP.get("/", async (req, res) => {
 
         uptime: {
             seconds: S7_UPTIME_SECONDS,
-            formatted:
-                `${S7_HOURS}h ${S7_MINUTES}m ${S7_SECONDS}s`,
+            formatted: `${S7_HOURS}h ${S7_MINUTES}m ${S7_SECONDS}s`,
         },
 
         usage: {
-            number_lookup:
-                "/search?type=num&query=919876543210",
+            number_lookup: "/search?type=num&query=919876543210",
 
-            telegram_lookup:
-                "/search?type=tg&query=username",
+            telegram_lookup: "/search?type=tg&query=username",
         },
 
         queue: {
             pending: SABIR7718_QUEUE.length,
-            processing:
-                S7_ACTIVE_REQUEST
-                    ? true
-                    : false,
+            processing: S7_ACTIVE_REQUEST ?
+                true :
+                false,
         },
 
         server: {
             port: S7_PORT,
             node: process.version,
         }
-        
+
     });
-    
+
 });
 
 if (process.env.URL) {
