@@ -176,9 +176,17 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
         )
     ) {
 
-        const S7_TG_ID = S7_TG_BLOCK.match(/📡\s*Telegram ID\s*:\s*(\d+)/i);
-        const S7_USERNAME = S7_TG_BLOCK.match(/💻\s*Username\s*:\s*@?([^\n\s]+)/i);
-        const S7_PHONE = S7_TG_BLOCK.match(/📞\s*Number\s*:\s*(\d+)/i);
+        const S7_TG_ID = S7_TG_BLOCK.match(
+            /Telegram ID\s*:\s*(\d+)/i
+        );
+
+        const S7_USERNAME = S7_TG_BLOCK.match(
+            /Username\s*:\s*@?([^\n\s]+)/i
+        );
+
+        const S7_PHONE = S7_TG_BLOCK.match(
+            /(?:Phone|Number)\s*:\s*(\d+)/i
+        );
 
         S7_TG_INFO = {
             telegram_id: S7_TG_ID ? S7_TG_ID[1].trim() : "N/A",
