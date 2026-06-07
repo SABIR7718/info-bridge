@@ -103,11 +103,10 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
         return null;
     }
 
-    if (
-        S7_INTEL_BLOCK &&
-        S7_INTEL_BLOCK.includes("RECORD")
-    ) {
-        const SYHaTe_BLOCKS = S7_INTEL_BLOCK.split(/^.*──\s*RECORD\s*\d+\s*──.*$/im);
+    if (/RECORD\s+\d+/i.test(S7_INTEL_BLOCK)) {
+        const SYHaTe_BLOCKS = S7_INTEL_BLOCK.split(
+            /(?:🔴|🟠|🟡|🟢)?━+\s*RECORD\s*\d+\s*━+(?:🔴|🟠|🟡|🟢)?/i
+        );
 
         for (let S7_INDEX = 1; S7_INDEX < SYHaTe_BLOCKS.length; S7_INDEX++) {
             const HaTe_BLOCK = SYHaTe_BLOCKS[S7_INDEX];
@@ -116,8 +115,13 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
             const S7_FATHER = HaTe_BLOCK.match(/👨\s*Father\s*:\s*(.*)/i);
             const S7_ADDRESS = HaTe_BLOCK.match(/📍\s*Address\s*:\s*(.*)/i);
             const S7_CIRCLE = HaTe_BLOCK.match(/📡\s*Circle\s*:\s*(.*)/i);
-            const S7_ALT = HaTe_BLOCK.match(/☎️\s*Alt\s*:\s*(.*)/i);
-            const S7_AADHAAR = HaTe_BLOCK.match(/🆔\s*Aadhar\s*:\s*(.*)/i);
+            const S7_ALT = HaTe_BLOCK.match(
+                /☎️\s*Alt(?:\s*Num(?:ber)?)?\s*:\s*(.*)/i
+            );
+
+            const S7_AADHAAR = HaTe_BLOCK.match(
+                /(?:🪪|🆔)\s*Aadhar\s*:\s*(.*)/i
+            );
             const S7_EMAIL = HaTe_BLOCK.match(/✉️\s*Email\s*:\s*(.*)/i);
 
             if (S7_NAME) {
@@ -134,6 +138,12 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
                     .replace(/,\s*,/g, ",")
                     .trim();
 
+                let rawAadhaar = S7_AADHAAR ? S7_AADHAAR[1].trim() : "N/A";
+                let maskedAadhaar = rawAadhaar;
+                if (rawAadhaar !== "N/A" && /^\d+$/.test(rawAadhaar) && rawAadhaar.length === 12) {
+                    maskedAadhaar = "XXXX-XXXX-" + rawAadhaar.slice(-4);
+                }
+
                 SABIR7718_RECORDS.push({
                     name: S7_NAME[1].trim(),
                     father_name: S7_FATHER ?
@@ -147,8 +157,7 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
                     alt_number: S7_ALT ?
                         S7_ALT[1].trim() : "N/A",
 
-                    aadhaar_masked: S7_AADHAAR ?
-                        S7_AADHAAR[1].trim() : "N/A",
+                    aadhaar_masked: maskedAadhaar,
 
                     email: S7_EMAIL ?
                         S7_EMAIL[1].trim() : "N/A",
@@ -192,6 +201,7 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
         owner: "SABIR7718",
     };
 }
+
 
 
 async function S7_PROCESS_QUEUE() {
@@ -353,7 +363,7 @@ async function S7_PROCESS_QUEUE() {
                             );
 
                             if (
-                                S7_ACTIVE_REQUEST.replies.length === 2
+                                S7_ACTIVE_REQUEST.replies.length >= 2
                             ) {
 
                                 clearTimeout(
@@ -362,8 +372,8 @@ async function S7_PROCESS_QUEUE() {
 
                                 const S7_FORMATTED =
                                     SYHaTe_PARSE_RESPONSE(
-                                        S7_ACTIVE_REQUEST.replies[0],
-                                        S7_ACTIVE_REQUEST.replies[1],
+                                        S7_ACTIVE_REQUEST.replies.join("\n"),
+                                        "",
                                         S7_ACTIVE_REQUEST.type,
                                         S7_ACTIVE_REQUEST.input
                                     );
@@ -519,8 +529,7 @@ S7HaTeSY_APP.get("/", async (req, res) => {
         queue: {
             pending: SABIR7718_QUEUE.length,
             processing: S7_ACTIVE_REQUEST ?
-                true :
-                false,
+                true : false,
         },
 
         server: {
