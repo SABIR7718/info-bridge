@@ -73,141 +73,166 @@ let S7_QUEUE_LOCK = false;
 
 function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
 
-    const SABIR7718_RECORDS = [];
-    let S7_TG_BLOCK = "";
-    let S7_INTEL_BLOCK = "";
-
     const HaTe_COMBINED_TEXT =
         (S7_REPLY_1 || "") +
         "\n" +
         (S7_REPLY_2 || "");
 
-    if (
-        HaTe_COMBINED_TEXT.includes("TG INFO") ||
-        HaTe_COMBINED_TEXT.includes("Telegram ID")
-    ) {
-        S7_TG_BLOCK = HaTe_COMBINED_TEXT;
-    }
+    if (S7_TYPE === "tg") {
+        const tgMatch = HaTe_COMBINED_TEXT.match(
+            /📄\s*Result\s*:\s*[\s\n]*(\d{8,15})/i
+        );
 
-    if (
-        HaTe_COMBINED_TEXT.includes("NUMBER INTEL") ||
-        HaTe_COMBINED_TEXT.includes("RECORD")
-    ) {
-        S7_INTEL_BLOCK = HaTe_COMBINED_TEXT;
-    }
+        if (tgMatch) {
+            return {
+                status: "success",
+                query_type: S7_TYPE,
+                input: S7_INPUT,
+                telegram_info: {
+                    telegram_id: tgMatch[1].trim(),
+                    username: "N/A",
+                    phone: "N/A",
+                },
+                total_records: 0,
+                records: [],
+                owner: "SABIR7718",
+            };
+        }
 
-    if (
-        !HaTe_COMBINED_TEXT.includes("RECORD") &&
-        !HaTe_COMBINED_TEXT.includes("Telegram ID")
-    ) {
+        const fallback = HaTe_COMBINED_TEXT.match(
+            /Result\s*:[\s\S]*?(\d{8,15})/i
+        );
+        if (fallback) {
+            return {
+                status: "success",
+                query_type: S7_TYPE,
+                input: S7_INPUT,
+                telegram_info: {
+                    telegram_id: fallback[1].trim(),
+                    username: "N/A",
+                    phone: "N/A",
+                },
+                total_records: 0,
+                records: [],
+                owner: "SABIR7718",
+            };
+        }
+
         return null;
     }
 
-    if (/RECORD\s+\d+/i.test(S7_INTEL_BLOCK)) {
-        const SYHaTe_BLOCKS = S7_INTEL_BLOCK.split(
-            /(?:🔴|🟠|🟡|🟢)?━+\s*RECORD\s*\d+\s*━+(?:🔴|🟠|🟡|🟢)?/i
+    if (S7_TYPE === "num") {
+        const SABIR7718_RECORDS = [];
+        
+        const resultSection = HaTe_COMBINED_TEXT.match(
+            /📄\s*Result\s*:([\s\S]*?)(?:└|👑|⚠️|$)/i
         );
 
-        for (let S7_INDEX = 1; S7_INDEX < SYHaTe_BLOCKS.length; S7_INDEX++) {
-            const HaTe_BLOCK = SYHaTe_BLOCKS[S7_INDEX];
+        if (!resultSection) return null;
 
-            const S7_NAME = HaTe_BLOCK.match(/👤\s*Name\s*:\s*(.*)/i);
-            const S7_FATHER = HaTe_BLOCK.match(/👨\s*Father\s*:\s*(.*)/i);
-            const S7_ADDRESS = HaTe_BLOCK.match(/📍\s*Address\s*:\s*(.*)/i);
-            const S7_CIRCLE = HaTe_BLOCK.match(/📡\s*Circle\s*:\s*(.*)/i);
-            const S7_ALT = HaTe_BLOCK.match(
-                /☎️\s*Alt(?:\s*Num(?:ber)?)?\s*:\s*(.*)/i
-            );
+        let raw = resultSection[1].trim();
+        
+        raw = raw
+            .replace(/,\s*$/, "")
+            .replace(/\n\s*,\s*\n/g, ",\n")
+            .trim();
+            
+        if (!raw.startsWith("[")) {
+            raw = "[" + raw + "]";
+        }
 
-            const S7_AADHAAR = HaTe_BLOCK.match(
-                /(?:🪪|🆔)\s*Aadhar\s*:\s*(.*)/i
-            );
-            const S7_EMAIL = HaTe_BLOCK.match(/✉️\s*Email\s*:\s*(.*)/i);
+        try {
+            raw = raw
+                .replace(/,\s*,/g, ",")
+                .replace(/,\s*]/g, "]")
+                .replace(/\[\s*,/g, "[");
 
-            if (S7_NAME) {
-                let SABIR7718_ADDRESS =
-                    S7_ADDRESS ?
-                    S7_ADDRESS[1]
-                    .trim()
-                    .replace(/!+/g, ", ") :
-                    "N/A";
+            const parsed = JSON.parse(raw);
 
-                SABIR7718_ADDRESS =
-                    SABIR7718_ADDRESS
-                    .replace(/^,\s*/, "")
-                    .replace(/,\s*,/g, ",")
-                    .trim();
+            const items = Array.isArray(parsed) ? parsed : [parsed];
 
-                let rawAadhaar = S7_AADHAAR ? S7_AADHAAR[1].trim() : "N/A";
-                let maskedAadhaar = rawAadhaar;
-                if (rawAadhaar !== "N/A" && /^\d+$/.test(rawAadhaar) && rawAadhaar.length === 12) {
-                    maskedAadhaar = "XXXX-XXXX-" + rawAadhaar.slice(-4);
+            for (const item of items) {
+                if (!item || typeof item !== "object") continue;
+
+                let rawId = (item.id || "").toString().trim();
+                let maskedAadhaar = "N/A";
+                if (rawId && /^\d+$/.test(rawId) && rawId.length === 12) {
+                    maskedAadhaar = "XXXX-XXXX-" + rawId.slice(-4);
+                } else if (rawId) {
+                    maskedAadhaar = rawId;
                 }
 
                 SABIR7718_RECORDS.push({
-                    name: S7_NAME[1].trim(),
-                    father_name: S7_FATHER ?
-                        S7_FATHER[1].trim() : "N/A",
-
-                    address: SABIR7718_ADDRESS,
-
-                    circle: S7_CIRCLE ?
-                        S7_CIRCLE[1].trim() : "N/A",
-
-                    alt_number: S7_ALT ?
-                        S7_ALT[1].trim() : "N/A",
-
+                    name: (item.name || "").trim() || "N/A",
+                    father_name: (item.fname || "").trim() || "N/A",
+                    address: (item.address || "")
+                        .toString()
+                        .trim()
+                        .replace(/!+/g, ", ")
+                        .replace(/^,\s*/, "")
+                        .replace(/,\s*,/g, ",")
+                        .trim() || "N/A",
+                    circle: (item.circle || "").trim() || "N/A",
+                    alt_number: (item.alt || "").trim() || "N/A",
                     aadhaar_masked: maskedAadhaar,
+                    email: (item.email || "").trim() || "N/A",
+                    mobile: (item.mobile || "").trim() || "N/A",
+                });
+            }
+        } catch (e) {
+            const blocks = raw.split(/},\s*{/);
+            for (let block of blocks) {
+                block = block.replace(/^[{\s]*/, "").replace(/[}\s]*$/, "");
 
-                    email: S7_EMAIL ?
-                        S7_EMAIL[1].trim() : "N/A",
+                const get = (key) => {
+                    const m = block.match(
+                        new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`, "i")
+                    );
+                    return m ? m[1].trim() : "";
+                };
+
+                const name = get("name");
+                if (!name && !get("id") && !get("address")) continue;
+
+                let rawId = get("id");
+                let maskedAadhaar = "N/A";
+                if (rawId && /^\d+$/.test(rawId) && rawId.length === 12) {
+                    maskedAadhaar = "XXXX-XXXX-" + rawId.slice(-4);
+                } else if (rawId) {
+                    maskedAadhaar = rawId;
+                }
+
+                SABIR7718_RECORDS.push({
+                    name: name || "N/A",
+                    father_name: get("fname") || "N/A",
+                    address: (get("address") || "N/A")
+                        .replace(/!+/g, ", ")
+                        .replace(/^,\s*/, "")
+                        .replace(/,\s*,/g, ",")
+                        .trim(),
+                    circle: get("circle") || "N/A",
+                    alt_number: get("alt") || "N/A",
+                    aadhaar_masked: maskedAadhaar,
+                    email: get("email") || "N/A",
+                    mobile: get("mobile") || "N/A",
                 });
             }
         }
-    }
 
-    let S7_TG_INFO = null;
+        if (SABIR7718_RECORDS.length === 0) return null;
 
-    if (
-        S7_TG_BLOCK &&
-        (
-            S7_TG_BLOCK.includes("TG INFO") ||
-            S7_TG_BLOCK.includes("Telegram ID")
-        )
-    ) {
-
-        const S7_TG_ID = S7_TG_BLOCK.match(
-            /Telegram ID\s*:\s*(\d+)/i
-        );
-
-        const S7_USERNAME = S7_TG_BLOCK.match(
-            /Username\s*:\s*@?([^\n\s]+)/i
-        );
-
-        const S7_PHONE = S7_TG_BLOCK.match(
-            /(?:Phone|Number)\s*:\s*(\d+)/i
-        );
-
-        S7_TG_INFO = {
-            telegram_id: S7_TG_ID ? S7_TG_ID[1].trim() : "N/A",
-            username: S7_USERNAME ? S7_USERNAME[1].trim() : "N/A",
-            phone: S7_PHONE ? S7_PHONE[1].trim() : "N/A",
+        return {
+            status: "success",
+            query_type: S7_TYPE,
+            input: S7_INPUT,
+            telegram_info: null,
+            total_records: SABIR7718_RECORDS.length,
+            records: SABIR7718_RECORDS,
+            owner: "SABIR7718",
         };
     }
 
-    if (SABIR7718_RECORDS.length === 0 && !S7_TG_INFO) {
-        return null;
-    }
-
-    return {
-        status: "success",
-        query_type: S7_TYPE,
-        input: S7_INPUT,
-        telegram_info: S7_TG_INFO,
-        total_records: SABIR7718_RECORDS.length,
-        records: SABIR7718_RECORDS,
-        owner: "SABIR7718",
-    };
+    return null;
 }
 
 
