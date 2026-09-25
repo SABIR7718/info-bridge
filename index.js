@@ -343,12 +343,18 @@ async function S7_PROCESS_QUEUE() {
                             }
                         }
 
-                        if (S7_ACTIVE_REQUEST.replies.length >= 1) {
-                            const bestReply = S7_ACTIVE_REQUEST.replies.reduce(
-                                (a, b) => (a.length > b.length ? a : b),
-                                ""
-                            );
+                        const bestReply = S7_ACTIVE_REQUEST.replies.reduce(
+                            (a, b) => (a.length > b.length ? a : b),
+                            ""
+                        );
 
+                        const hasReport =
+                            /RECORD\s*#\d+/i.test(bestReply) ||
+                            /MOBILE_INFO\s*INTELLIGENCE/i.test(bestReply) ||
+                            /📄\s*Result\s*:/i.test(bestReply) ||
+                            /telegram_id|Result\s*:/i.test(bestReply);
+
+                        if (hasReport) {
                             clearTimeout(S7_ACTIVE_REQUEST.timeout);
 
                             const S7_FORMATTED = SYHaTe_PARSE_RESPONSE(
