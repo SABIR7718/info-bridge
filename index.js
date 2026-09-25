@@ -123,100 +123,44 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
 
     if (S7_TYPE === "num") {
         const SABIR7718_RECORDS = [];
-        
-        const resultSection = HaTe_COMBINED_TEXT.match(
-            /📄\s*Result\s*:([\s\S]*?)(?:└|👑|⚠️|$)/i
-        );
 
-        if (!resultSection) return null;
+        const recordBlocks = HaTe_COMBINED_TEXT.split(/RECORD\s*#\d+/i).slice(1);
 
-        let raw = resultSection[1].trim();
-        
-        raw = raw
-            .replace(/,\s*$/, "")
-            .replace(/\n\s*,\s*\n/g, ",\n")
-            .trim();
-            
-        if (!raw.startsWith("[")) {
-            raw = "[" + raw + "]";
-        }
+        for (const block of recordBlocks) {
+            const get = (label) => {
+                const regex = new RegExp(
+                    label + "\\s*:\\s*(.+?)(?:\\n|$)",
+                    "i"
+                );
+                const m = block.match(regex);
+                return m ? m[1].trim() : "N/A";
+            };
 
-        try {
-            raw = raw
-                .replace(/,\s*,/g, ",")
-                .replace(/,\s*]/g, "]")
-                .replace(/\[\s*,/g, "[");
+            const name = get("OWNER NAME");
+            const father = get("FATHER NAME");
+            const mobile = get("MOBILE NO");
+            const alt = get("ALT MOBILE");
+            const aadhaar = get("AADHAR CARD NO");
+            const circle = get("CIRCLE");
+            const address = get("ADDRESS");
 
-            const parsed = JSON.parse(raw);
+            if (name === "N/A" && mobile === "N/A" && aadhaar === "N/A") continue;
 
-            const items = Array.isArray(parsed) ? parsed : [parsed];
-
-            for (const item of items) {
-                if (!item || typeof item !== "object") continue;
-
-                let rawId = (item.id || "").toString().trim();
-                let maskedAadhaar = "N/A";
-                if (rawId && /^\d+$/.test(rawId) && rawId.length === 12) {
-                    maskedAadhaar = "XXXX-XXXX-" + rawId.slice(-4);
-                } else if (rawId) {
-                    maskedAadhaar = rawId;
-                }
-
-                SABIR7718_RECORDS.push({
-                    name: (item.name || "").trim() || "N/A",
-                    father_name: (item.fname || "").trim() || "N/A",
-                    address: (item.address || "")
-                        .toString()
-                        .trim()
-                        .replace(/!+/g, ", ")
-                        .replace(/^,\s*/, "")
-                        .replace(/,\s*,/g, ",")
-                        .trim() || "N/A",
-                    circle: (item.circle || "").trim() || "N/A",
-                    alt_number: (item.alt || "").trim() || "N/A",
-                    aadhaar_masked: maskedAadhaar,
-                    email: (item.email || "").trim() || "N/A",
-                    mobile: (item.mobile || "").trim() || "N/A",
-                });
+            let maskedAadhaar = aadhaar;
+            if (/^\d{12}$/.test(aadhaar)) {
+                maskedAadhaar = "XXXX-XXXX-" + aadhaar.slice(-4);
             }
-        } catch (e) {
-            const blocks = raw.split(/},\s*{/);
-            for (let block of blocks) {
-                block = block.replace(/^[{\s]*/, "").replace(/[}\s]*$/, "");
 
-                const get = (key) => {
-                    const m = block.match(
-                        new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`, "i")
-                    );
-                    return m ? m[1].trim() : "";
-                };
-
-                const name = get("name");
-                if (!name && !get("id") && !get("address")) continue;
-
-                let rawId = get("id");
-                let maskedAadhaar = "N/A";
-                if (rawId && /^\d+$/.test(rawId) && rawId.length === 12) {
-                    maskedAadhaar = "XXXX-XXXX-" + rawId.slice(-4);
-                } else if (rawId) {
-                    maskedAadhaar = rawId;
-                }
-
-                SABIR7718_RECORDS.push({
-                    name: name || "N/A",
-                    father_name: get("fname") || "N/A",
-                    address: (get("address") || "N/A")
-                        .replace(/!+/g, ", ")
-                        .replace(/^,\s*/, "")
-                        .replace(/,\s*,/g, ",")
-                        .trim(),
-                    circle: get("circle") || "N/A",
-                    alt_number: get("alt") || "N/A",
-                    aadhaar_masked: maskedAadhaar,
-                    email: get("email") || "N/A",
-                    mobile: get("mobile") || "N/A",
-                });
-            }
+            SABIR7718_RECORDS.push({
+                name: name || "N/A",
+                father_name: father || "N/A",
+                address: address || "N/A",
+                circle: circle || "N/A",
+                alt_number: alt || "N/A",
+                aadhaar_masked: maskedAadhaar || "N/A",
+                email: "N/A",
+                mobile: mobile || "N/A",
+            });
         }
 
         if (SABIR7718_RECORDS.length === 0) return null;
@@ -234,8 +178,6 @@ function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
 
     return null;
 }
-
-
 
 async function S7_PROCESS_QUEUE() {
 
@@ -279,7 +221,7 @@ async function S7_PROCESS_QUEUE() {
             S7_PROCESS_QUEUE();
         }
 
-    }, 25000);
+    }, 35000);
 
     try {
 
@@ -363,90 +305,84 @@ async function S7_PROCESS_QUEUE() {
     );
 
     SABIR7718_CLIENT.addEventHandler(
-
         async (S7_EVENT) => {
+            const SYHaTe_MESSAGE = S7_EVENT.message;
 
-                const SYHaTe_MESSAGE =
-                    S7_EVENT.message;
+            if (
+                !SYHaTe_MESSAGE.out &&
+                SYHaTe_MESSAGE.peerId &&
+                S7_ACTIVE_REQUEST
+            ) {
+                try {
+                    const S7_SENDER = await SABIR7718_CLIENT.getEntity(
+                        SYHaTe_MESSAGE.peerId
+                    );
 
-                if (
-                    !SYHaTe_MESSAGE.out &&
-                    SYHaTe_MESSAGE.peerId &&
-                    S7_ACTIVE_REQUEST
-                ) {
+                    if (
+                        S7_SENDER.username &&
+                        S7_SENDER.username.toLowerCase() ===
+                        S7_TARGET_BOT.toLowerCase()
+                    ) {
+                        if (SYHaTe_MESSAGE.message) {
+                            S7_ACTIVE_REQUEST.replies.push(SYHaTe_MESSAGE.message);
+                        }
 
-                    try {
-
-                        const S7_SENDER =
-                            await SABIR7718_CLIENT.getEntity(
-                                SYHaTe_MESSAGE.peerId
-                            );
-
-                        if (
-                            S7_SENDER.username &&
-                            S7_SENDER.username.toLowerCase() ===
-                            S7_TARGET_BOT.toLowerCase()
-                        ) {
-
-                            const HaTe_TEXT =
-                                SYHaTe_MESSAGE.message;
-
-                            S7_ACTIVE_REQUEST.replies.push(
-                                HaTe_TEXT
-                            );
-
-                            if (
-                                S7_ACTIVE_REQUEST.replies.length >= 2
-                            ) {
-
-                                clearTimeout(
-                                    S7_ACTIVE_REQUEST.timeout
+                        if (SYHaTe_MESSAGE.document) {
+                            try {
+                                const buffer = await SABIR7718_CLIENT.downloadMedia(
+                                    SYHaTe_MESSAGE,
+                                    {}
                                 );
 
-                                const S7_FORMATTED =
-                                    SYHaTe_PARSE_RESPONSE(
-                                        S7_ACTIVE_REQUEST.replies.join("\n"),
-                                        "",
-                                        S7_ACTIVE_REQUEST.type,
-                                        S7_ACTIVE_REQUEST.input
-                                    );
+                                const fileText = buffer.toString("utf-8");
+                                S7_ACTIVE_REQUEST.replies.push(fileText);
 
-                                if (S7_FORMATTED) {
-
-                                    S7_ACTIVE_REQUEST.res.json(
-                                        S7_FORMATTED
-                                    );
-
-                                } else {
-
-                                    S7_ACTIVE_REQUEST.res.status(404).json({
-                                        status: "error",
-                                        error: "not_found",
-                                        message: `No result for ${S7_ACTIVE_REQUEST.input}`,
-                                    });
-                                }
-
-                                S7_ACTIVE_REQUEST = null;
-
-                                S7_QUEUE_LOCK = false;
-
-                                S7_PROCESS_QUEUE();
+                                log("info", "FILE", "File downloaded & parsed");
+                            } catch (err) {
+                                log("error", "FILE", err.message);
                             }
                         }
 
-                    } catch (S7_ERROR) {
+                        if (S7_ACTIVE_REQUEST.replies.length >= 1) {
+                            const bestReply = S7_ACTIVE_REQUEST.replies.reduce(
+                                (a, b) => (a.length > b.length ? a : b),
+                                ""
+                            );
 
-                        log(
-                            "error",
-                            "HANDLER",
-                            S7_ERROR.message
-                        );
+                            clearTimeout(S7_ACTIVE_REQUEST.timeout);
+
+                            const S7_FORMATTED = SYHaTe_PARSE_RESPONSE(
+                                bestReply,
+                                "",
+                                S7_ACTIVE_REQUEST.type,
+                                S7_ACTIVE_REQUEST.input
+                            );
+
+                            if (S7_FORMATTED) {
+                                S7_ACTIVE_REQUEST.res.json(S7_FORMATTED);
+                            } else {
+                                S7_ACTIVE_REQUEST.res.status(404).json({
+                                    status: "error",
+                                    error: "not_found",
+                                    message: `No result for ${S7_ACTIVE_REQUEST.input}`,
+                                });
+                            }
+
+                            S7_ACTIVE_REQUEST = null;
+                            S7_QUEUE_LOCK = false;
+                            S7_PROCESS_QUEUE();
+                        }
                     }
+                } catch (S7_ERROR) {
+                    log(
+                        "error",
+                        "HANDLER",
+                        S7_ERROR.message
+                    );
                 }
-
-            },
-
-            new NewMessage({})
+            }
+        },
+        new NewMessage({})
     );
 
     S7HaTeSY_APP.get("/search", (req, res) => {
