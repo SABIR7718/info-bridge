@@ -414,13 +414,13 @@ async function S7_PROCESS_QUEUE() {
 
         } else if (type === "tg") {
 
-            S7_COMMAND = `/tg ${query}`;
+            S7_COMMAND = `/tgnum ${query}`;
 
         } else {
 
             return res.status(400).json({
                 status: "error",
-                message: "Invalid type use num/tg",
+                message: "Invalid type use num/tgnum",
             });
         }
 
