@@ -108,6 +108,33 @@ function buttonLabels(message) {
   return labels;
 }
 
+function isSearchingMessage(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return (
+    /searching/i.test(t) ||
+    /please\s*wait/i.test(t) ||
+    /looking\s*up/i.test(t) ||
+    /fetching/i.test(t) ||
+    (/[⏳🔍🔎]/.test(text) && t.length < 80)
+  );
+}
+
+function isNotFoundMessage(text) {
+  if (!text) return false;
+  return (
+    /not\s*found/i.test(text) ||
+    /no\s*result/i.test(text) ||
+    /no\s*data/i.test(text) ||
+    /nothing\s*found/i.test(text) ||
+    /could\s*not\s*find/i.test(text) ||
+    /failed/i.test(text) ||
+    /invalid/i.test(text) ||
+    /does\s*not\s*exist/i.test(text) ||
+    /user\s*not\s*found/i.test(text)
+  );
+}
+
 /* ─── parsers ─────────────────────────────────────────────── */
 
 function safeMatch(text, patterns) {
@@ -201,11 +228,6 @@ function parseNumText(text) {
 function parseTgText(text) {
   if (!text) return null;
 
-  // screenshot format (plain + fancy):
-  // TG ID : 6051143430
-  // PHONE : 7365085213
-  // COUNTRY : India
-  // COUNTRY CODE : +91
   const idMatch =
     text.match(/TG\s*ID\s*:?\s*(\d{6,15})/i) ||
     text.match(/🆔\s*TG\s*ID\s*:?\s*(\d{6,15})/i) ||
@@ -343,7 +365,7 @@ async function processQueue() {
       } else {
         finishErr(404, {
           status: "error",
-          error: "timeout",
+          error: "not_found",
           message: `No result for ${active.input}`,
         });
       }
@@ -353,7 +375,7 @@ async function processQueue() {
       else
         finishErr(404, {
           status: "error",
-          error: "timeout",
+          error: "not_found",
           message: `No result for ${active.input}`,
         });
     }
@@ -367,9 +389,6 @@ async function onMessage(event) {
   if (!msg || msg.out || !active) return;
 
   try {
-    // Accept messages from the target chat/bot OR any message that
-    // looks like a report (group bots often post as themselves /
-    // different usernames). Filter by content when username differs.
     let fromTarget = false;
     try {
       const sender = await client.getEntity(msg.peerId);
@@ -385,22 +404,42 @@ async function onMessage(event) {
     } catch (_) {}
 
     const text = msg.message || "";
+
+    // ignore temporary "Searching..." / loading messages
+    if (isSearchingMessage(text)) {
+      log("info", "MSG", "searching (ignored) | " + text.slice(0, 60));
+      return;
+    }
+
     const looksLikeReport =
-      /TELEGRAM\s*INFO|NUMBER\s*INFO|TG\s*ID|RECORD\s*\d|Rᴇᴄᴏʀᴅ|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|QUERY\s*:/i.test(
+      /TELEGRAM\s*INFO|NUMBER\s*INFO|TG\s*ID|RECORD\s*\d|Rᴇᴄᴏʀᴅ|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|QUERY\s*:|PHONE\s*:|COUNTRY\s*:/i.test(
         text
       ) || !!msg.document;
 
-    if (!fromTarget && !looksLikeReport) return;
+    const looksLikeFail = isNotFoundMessage(text);
+
+    if (!fromTarget && !looksLikeReport && !looksLikeFail) return;
 
     if (text) {
       active.replies.push(text);
       active.rawMessages.push(msg);
-      log("info", "MSG", text.slice(0, 120).replace(/\n/g, " | "));
+      log("info", "MSG", text.slice(0, 140).replace(/\n/g, " | "));
     }
 
     // ── TG lookup ──
     if (active.type === "tg") {
       const combined = active.replies.join("\n");
+
+      if (isNotFoundMessage(combined) && !/TG\s*ID/i.test(combined)) {
+        log("info", "TG", "not found");
+        finishErr(404, {
+          status: "error",
+          error: "not_found",
+          message: `No result for ${active.input}`,
+        });
+        return;
+      }
+
       if (/TG\s*ID|TELEGRAM\s*INFO|telegram[_\s]?id|🆔/i.test(combined)) {
         const parsed = parseTgText(combined);
         if (parsed) {
@@ -414,7 +453,16 @@ async function onMessage(event) {
     // ── NUM lookup ──
     if (active.type !== "num") return;
 
-    // accept JSON file at any stage
+    if (looksLikeFail && !looksLikeReport && !msg.document) {
+      log("info", "NUM", "not found");
+      finishErr(404, {
+        status: "error",
+        error: "not_found",
+        message: `No result for ${active.input}`,
+      });
+      return;
+    }
+
     if (msg.document) {
       try {
         const buffer = await client.downloadMedia(msg, {});
@@ -462,8 +510,8 @@ async function onMessage(event) {
         } else {
           finishErr(404, {
             status: "error",
-            error: "parse_failed",
-            message: `Could not parse file for ${active.input}`,
+            error: "not_found",
+            message: `No result for ${active.input}`,
           });
         }
       } catch (err) {
@@ -472,7 +520,6 @@ async function onMessage(event) {
       return;
     }
 
-    // first report → start navigating buttons
     const isReport =
       /NUMBER\s*INFO|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|RECORD\s*\d|Rᴇᴄᴏʀᴅ\s*\d|Records\s*:|Rᴇᴄᴏʀᴅꜱ/i.test(
         text
