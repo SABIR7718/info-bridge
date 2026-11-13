@@ -116,7 +116,7 @@ function isSearchingMessage(text) {
     /please\s*wait/i.test(t) ||
     /looking\s*up/i.test(t) ||
     /fetching/i.test(t) ||
-    (/[⏳🔍🔎]/.test(text) && t.length < 80)
+    (/[⏳🔍🔎]/.test(text) && t.length < 80 && !/\d{6,}/.test(text))
   );
 }
 
@@ -128,8 +128,7 @@ function isNotFoundMessage(text) {
     /no\s*data/i.test(text) ||
     /nothing\s*found/i.test(text) ||
     /could\s*not\s*find/i.test(text) ||
-    /failed/i.test(text) ||
-    /invalid/i.test(text) ||
+    /\bfailed\b/i.test(text) ||
     /does\s*not\s*exist/i.test(text) ||
     /user\s*not\s*found/i.test(text)
   );
@@ -235,19 +234,19 @@ function parseTgText(text) {
     text.match(/TGID\s*:?\s*(\d{6,15})/i);
 
   const phoneMatch =
+    text.match(/Pʜᴏɴᴇ\s*:?\s*(\+?\d{8,15})/i) ||
     text.match(/PHONE\s*:?\s*(\+?\d{8,15})/i) ||
-    text.match(/Phone\s*:?\s*(\+?\d{8,15})/i) ||
-    text.match(/Pʜᴏɴᴇ\s*:?\s*(\+?\d{8,15})/i);
+    text.match(/Phone\s*:?\s*(\+?\d{8,15})/i);
 
   const countryMatch =
+    text.match(/Cᴏᴜɴᴛʀʏ\s*:?\s*(.+?)(?:\n|$)/i) ||
     text.match(/COUNTRY\s*:?\s*(.+?)(?:\n|$)/i) ||
-    text.match(/Country\s*:?\s*(.+?)(?:\n|$)/i) ||
-    text.match(/Cᴏᴜɴᴛʀʏ\s*:?\s*(.+?)(?:\n|$)/i);
+    text.match(/Country\s*:?\s*(.+?)(?:\n|$)/i);
 
   const codeMatch =
+    text.match(/Cᴏᴜɴᴛʀʏ\s*Cᴏᴅᴇ\s*:?\s*(\+?\d+)/i) ||
     text.match(/COUNTRY\s*CODE\s*:?\s*(\+?\d+)/i) ||
-    text.match(/Country\s*Code\s*:?\s*(\+?\d+)/i) ||
-    text.match(/Cᴏᴜɴᴛʀʏ\s*Cᴏᴅᴇ\s*:?\s*(\+?\d+)/i);
+    text.match(/Country\s*Code\s*:?\s*(\+?\d+)/i);
 
   if (!idMatch) return null;
 
@@ -347,6 +346,11 @@ async function processQueue() {
   active.timeout = setTimeout(() => {
     if (!active) return;
     log("warn", "TIMEOUT", active.input);
+    log(
+      "warn",
+      "TIMEOUT_REPLIES",
+      JSON.stringify(active.replies || []).slice(0, 600)
+    );
 
     const allText = (active.replies || []).join("\n");
 
@@ -389,48 +393,32 @@ async function onMessage(event) {
   if (!msg || msg.out || !active) return;
 
   try {
-    let fromTarget = false;
-    try {
-      const sender = await client.getEntity(msg.peerId);
-      const uname = (sender.username || "").toLowerCase();
-      const title = (sender.title || "").toLowerCase();
-      if (
-        uname === BOT_USERNAME.toLowerCase() ||
-        title.includes("posing") ||
-        title.includes("osint")
-      ) {
-        fromTarget = true;
-      }
-    } catch (_) {}
-
     const text = msg.message || "";
 
-    // ignore temporary "Searching..." / loading messages
+    // log EVERY incoming message while a request is active
+    log(
+      "info",
+      "RAW",
+      `doc=${!!msg.document} len=${text.length} | ${text
+        .slice(0, 120)
+        .replace(/\n/g, " \\n ")}`
+    );
+
     if (isSearchingMessage(text)) {
-      log("info", "MSG", "searching (ignored) | " + text.slice(0, 60));
+      log("info", "MSG", "searching (ignored)");
       return;
     }
-
-    const looksLikeReport =
-      /TELEGRAM\s*INFO|NUMBER\s*INFO|TG\s*ID|RECORD\s*\d|Rᴇᴄᴏʀᴅ|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|QUERY\s*:|PHONE\s*:|COUNTRY\s*:/i.test(
-        text
-      ) || !!msg.document;
-
-    const looksLikeFail = isNotFoundMessage(text);
-
-    if (!fromTarget && !looksLikeReport && !looksLikeFail) return;
 
     if (text) {
       active.replies.push(text);
       active.rawMessages.push(msg);
-      log("info", "MSG", text.slice(0, 140).replace(/\n/g, " | "));
     }
 
     // ── TG lookup ──
     if (active.type === "tg") {
       const combined = active.replies.join("\n");
 
-      if (isNotFoundMessage(combined) && !/TG\s*ID/i.test(combined)) {
+      if (isNotFoundMessage(combined) && !/TG\s*ID|\d{9,}/i.test(combined)) {
         log("info", "TG", "not found");
         finishErr(404, {
           status: "error",
@@ -440,12 +428,14 @@ async function onMessage(event) {
         return;
       }
 
-      if (/TG\s*ID|TELEGRAM\s*INFO|telegram[_\s]?id|🆔/i.test(combined)) {
+      if (/TG\s*ID/i.test(combined)) {
         const parsed = parseTgText(combined);
         if (parsed) {
           log("info", "TG", `parsed id=${parsed.telegram_info.telegram_id}`);
           finishOk(parsed);
+          return;
         }
+        log("warn", "TG", "TG ID present but parse failed");
       }
       return;
     }
@@ -453,7 +443,11 @@ async function onMessage(event) {
     // ── NUM lookup ──
     if (active.type !== "num") return;
 
-    if (looksLikeFail && !looksLikeReport && !msg.document) {
+    if (
+      isNotFoundMessage(text) &&
+      !msg.document &&
+      !/RECORD|NUMBER/i.test(text)
+    ) {
       log("info", "NUM", "not found");
       finishErr(404, {
         status: "error",
