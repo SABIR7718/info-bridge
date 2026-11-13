@@ -26,7 +26,7 @@
 
 const { TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
-const { NewMessage } = require("telegram/events");
+const { NewMessage, EditedMessage } = require("telegram/events");
 const { Api } = require("telegram");
 const express = require("express");
 const readline = require("readline");
@@ -605,6 +605,8 @@ async function onMessage(event) {
   log("info", "SYSTEM", `Target bot/group user: @${BOT_USERNAME}`);
 
   client.addEventHandler(onMessage, new NewMessage({}));
+  // bot edits the same "Searching..." message into the final result
+  client.addEventHandler(onMessage, new EditedMessage({}));
 
   app.get("/search", (req, res) => {
     const { type, query } = req.query;
