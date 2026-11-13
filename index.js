@@ -1,538 +1,531 @@
 /*
- * © 2026 SeXyxeon (VOIDSEC)
- *
- * ⚠️ COPYRIGHT NOTICE
- * This source code is protected under copyright law.
- * Any form of re-uploading, recoding, modification,
- * selling, or redistribution WITHOUT explicit permission
- * from the original author is strictly prohibited.
- *
- * ❌ NO CREDIT = NO PERMISSION
- * ❌ DO NOT CLAIM THIS CODE AS YOUR OWN
- *
- * ✔️ Usage or modification is allowed ONLY
- * with prior permission and proper credit.
- *
- * OFFICIAL LINKS (ONLY):
- * YouTube   : https://youtube.com/@voidsec7718
- * Instagram : sabir._7718
- * Telegram  : https://t.me/SABIR7718
- * GitHub    : https://github.com/SABIR7718
- * WhatsApp  : +91 73650 85213
- *
- * Violations may result in DMCA takedown
- * or termination of the Telegram bot.
+ * © 2026 SABIR7718
+ * S7 Info Bridge — rewritten for OSINTfame / TumNahiHo group bot
  */
 
-const {
-    TelegramClient
-} = require("telegram");
-const {
-    StringSession
-} = require("telegram/sessions");
-const {
-    NewMessage
-} = require("telegram/events");
+const { TelegramClient } = require("telegram");
+const { StringSession } = require("telegram/sessions");
+const { NewMessage } = require("telegram/events");
+const { Api } = require("telegram");
 const express = require("express");
 const readline = require("readline");
 require("dotenv").config();
 
-const {
-    log
-} = require("@sabir7718/log");
+const { log } = require("@sabir7718/log");
 
-const S7HaTeSY_APP = express();
-S7HaTeSY_APP.use(express.json());
+const app = express();
+app.use(express.json());
 
-const S7_API_ID = parseInt(process.env.API_ID);
-const S7_API_HASH = process.env.API_HASH;
-const S7_PORT = process.env.PORT || 3000;
+const API_ID = parseInt(process.env.API_ID, 10);
+const API_HASH = process.env.API_HASH;
+const PORT = process.env.PORT || 3000;
+const BOT_USERNAME = (process.env.BOT_USERNAME || "TumNahiHo").replace(/^@/, "");
+const SESSION = new StringSession(process.env.SESSION_STRING || "");
 
-const S7_TARGET_BOT = process.env.BOT_USERNAME;
-
-const SYHaTe_SESSION = new StringSession(process.env.SESSION_STRING || "");
-
-const HaTe_READLINE = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
 });
 
-const SABIR7718_CLIENT = new TelegramClient(
-    SYHaTe_SESSION,
-    S7_API_ID,
-    S7_API_HASH, {
-        connectionRetries: 5,
-    }
-);
+const client = new TelegramClient(SESSION, API_ID, API_HASH, {
+  connectionRetries: 5,
+});
 
-let S7_ACTIVE_REQUEST = null;
+let active = null;
+const queue = [];
+let locked = false;
 
-const SABIR7718_QUEUE = [];
+/* ─── helpers ─────────────────────────────────────────────── */
 
-let S7_QUEUE_LOCK = false;
-
-function SYHaTe_PARSE_RESPONSE(S7_REPLY_1, S7_REPLY_2, S7_TYPE, S7_INPUT) {
-
-    const HaTe_COMBINED_TEXT =
-        (S7_REPLY_1 || "") +
-        "\n" +
-        (S7_REPLY_2 || "");
-
-    if (S7_TYPE === "tg") {
-        const tgMatch = HaTe_COMBINED_TEXT.match(
-            /📄\s*Result\s*:\s*[\s\n]*(\d{8,15})/i
-        );
-
-        if (tgMatch) {
-            return {
-                status: "success",
-                query_type: S7_TYPE,
-                input: S7_INPUT,
-                telegram_info: {
-                    telegram_id: tgMatch[1].trim(),
-                    username: "N/A",
-                    phone: "N/A",
-                },
-                total_records: 0,
-                records: [],
-                owner: "SABIR7718",
-            };
-        }
-
-        const fallback = HaTe_COMBINED_TEXT.match(
-            /Result\s*:[\s\S]*?(\d{8,15})/i
-        );
-        if (fallback) {
-            return {
-                status: "success",
-                query_type: S7_TYPE,
-                input: S7_INPUT,
-                telegram_info: {
-                    telegram_id: fallback[1].trim(),
-                    username: "N/A",
-                    phone: "N/A",
-                },
-                total_records: 0,
-                records: [],
-                owner: "SABIR7718",
-            };
-        }
-
-        return null;
-    }
-
-    if (S7_TYPE === "num") {
-        const SABIR7718_RECORDS = [];
-
-        const recordBlocks = HaTe_COMBINED_TEXT.split(/RECORD\s*#\d+/i).slice(1);
-
-        for (const block of recordBlocks) {
-            const get = (label) => {
-                const regex = new RegExp(
-                    label + "\\s*:\\s*(.+?)(?:\\n|$)",
-                    "i"
-                );
-                const m = block.match(regex);
-                return m ? m[1].trim() : "N/A";
-            };
-
-            const name = get("OWNER NAME");
-            const father = get("FATHER NAME");
-            const mobile = get("MOBILE NO");
-            const alt = get("ALT MOBILE");
-            const aadhaar = get("AADHAR CARD NO");
-            const circle = get("CIRCLE");
-            const address = get("ADDRESS");
-
-            if (name === "N/A" && mobile === "N/A" && aadhaar === "N/A") continue;
-
-            let maskedAadhaar = aadhaar;
-            if (/^\d{12}$/.test(aadhaar)) {
-                maskedAadhaar = "XXXX-XXXX-" + aadhaar.slice(-4);
-            }
-
-            SABIR7718_RECORDS.push({
-                name: name || "N/A",
-                father_name: father || "N/A",
-                address: address || "N/A",
-                circle: circle || "N/A",
-                alt_number: alt || "N/A",
-                aadhaar_masked: maskedAadhaar || "N/A",
-                email: "N/A",
-                mobile: mobile || "N/A",
-            });
-        }
-
-        if (SABIR7718_RECORDS.length === 0) return null;
-
-        return {
-            status: "success",
-            query_type: S7_TYPE,
-            input: S7_INPUT,
-            telegram_info: null,
-            total_records: SABIR7718_RECORDS.length,
-            records: SABIR7718_RECORDS,
-            owner: "SABIR7718",
-        };
-    }
-
-    return null;
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-async function S7_PROCESS_QUEUE() {
+async function getBotEntity() {
+  return client.getEntity(BOT_USERNAME);
+}
 
-    if (
-        S7_QUEUE_LOCK ||
-        SABIR7718_QUEUE.length === 0
-    ) {
-        return;
-    }
+async function sendCommand(cmd) {
+  const entity = await getBotEntity();
+  await client.sendMessage(entity, { message: cmd });
+}
 
-    S7_QUEUE_LOCK = true;
+async function clickButton(message, buttonText) {
+  if (!message.replyMarkup || !message.replyMarkup.rows) return false;
 
-    const SYHaTe_CURRENT =
-        SABIR7718_QUEUE.shift();
-
-    S7_ACTIVE_REQUEST = SYHaTe_CURRENT;
-
-    log(
-        "info",
-        "QUEUE",
-        `Processing -> ${SYHaTe_CURRENT.command}`
-    );
-
-    SYHaTe_CURRENT.timeout = setTimeout(() => {
-
-        if (
-            S7_ACTIVE_REQUEST &&
-            S7_ACTIVE_REQUEST.id === SYHaTe_CURRENT.id
-        ) {
-
-            SYHaTe_CURRENT.res.status(504).json({
-                status: "error",
-                error: "timeout",
-                message: "Bot response timeout",
-            });
-
-            S7_ACTIVE_REQUEST = null;
-
-            S7_QUEUE_LOCK = false;
-
-            S7_PROCESS_QUEUE();
+  for (const row of message.replyMarkup.rows) {
+    for (const btn of row.buttons) {
+      const text = (btn.text || "").toLowerCase();
+      if (text.includes(buttonText.toLowerCase())) {
+        try {
+          await client.invoke(
+            new Api.messages.GetBotCallbackAnswer({
+              peer: await getBotEntity(),
+              msgId: message.id,
+              data: btn.data,
+            })
+          );
+          return true;
+        } catch (e) {
+          log("warn", "BTN", e.message);
+          return false;
         }
+      }
+    }
+  }
+  return false;
+}
 
-    }, 35000);
+function hasButtons(message) {
+  return !!(message.replyMarkup && message.replyMarkup.rows);
+}
 
-    try {
+function buttonLabels(message) {
+  if (!hasButtons(message)) return [];
+  const labels = [];
+  for (const row of message.replyMarkup.rows) {
+    for (const btn of row.buttons) {
+      if (btn.text) labels.push(btn.text);
+    }
+  }
+  return labels;
+}
 
-        await SABIR7718_CLIENT.sendMessage(
-            S7_TARGET_BOT, {
-                message: SYHaTe_CURRENT.command,
-            }
-        );
+/* ─── parsers ─────────────────────────────────────────────── */
 
-    } catch (S7_ERROR) {
+function parseNumText(text) {
+  const records = [];
+  const blocks = text.split(/📰\s*Rᴇᴄᴏʀᴅ\s*\d+\/\d+|📰\s*RECORD\s*\d+\/\d+/i).slice(1);
 
-        log(
-            "error",
-            "TELEGRAM",
-            S7_ERROR.message
-        );
+  for (const block of blocks) {
+    const get = (label) => {
+      const re = new RegExp(label + "\\s*:\\s*(.+?)(?:\\n|$)", "i");
+      const m = block.match(re);
+      return m ? m[1].trim() : "N/A";
+    };
 
-        clearTimeout(SYHaTe_CURRENT.timeout);
+    const mobile = get("Nᴜᴍʙᴇʀ|Number|MOBILE");
+    const name = get("Nᴀᴍᴇ|Name");
+    const father = get("Fᴀᴛʜᴇʀ|Father");
+    const alt = get("Aʟᴛ\\s*Nᴜᴍ|Alt");
+    const circle = get("Cɪʀᴄʟᴇ|Circle");
+    const address = get("Aᴅᴅʀᴇꜱꜱ|Address");
+    const id = get("Iᴅ|ID|Aadhaar");
 
-        SYHaTe_CURRENT.res.status(500).json({
-            status: "error",
-            error: "telegram_error",
-            message: "Failed to contact telegram bot",
+    if (name === "N/A" && mobile === "N/A") continue;
+
+    records.push({
+      mobile: mobile || "N/A",
+      name: name || "N/A",
+      father_name: father || "N/A",
+      address: address || "N/A",
+      circle: circle || "N/A",
+      alternate: alt || "N/A",
+      id: id || "N/A",
+      email: "N/A",
+    });
+  }
+  return records;
+}
+
+function parseTgText(text) {
+  const idMatch =
+    text.match(/TG\s*ID\s*:?\s*(\d{6,15})/i) ||
+    text.match(/🆔\s*TG\s*ID\s*:?\s*(\d{6,15})/i) ||
+    text.match(/telegram[_\s]?id\s*:?\s*(\d{6,15})/i);
+
+  const phoneMatch =
+    text.match(/Pʜᴏɴᴇ\s*:?\s*(\+?\d{8,15})/i) ||
+    text.match(/Phone\s*:?\s*(\+?\d{8,15})/i);
+
+  const countryMatch =
+    text.match(/Cᴏᴜɴᴛʀʏ\s*:?\s*(.+?)(?:\n|$)/i) ||
+    text.match(/Country\s*:?\s*(.+?)(?:\n|$)/i);
+
+  const codeMatch =
+    text.match(/Cᴏᴜɴᴛʀʏ\s*Cᴏᴅᴇ\s*:?\s*(\+?\d+)/i) ||
+    text.match(/Country\s*Code\s*:?\s*(\+?\d+)/i);
+
+  if (!idMatch) return null;
+
+  return {
+    status: "success",
+    query_type: "tg",
+    input: active ? active.input : null,
+    telegram_info: {
+      telegram_id: idMatch[1],
+      phone: phoneMatch ? phoneMatch[1] : "N/A",
+      country: countryMatch ? countryMatch[1].trim() : "N/A",
+      country_code: codeMatch ? codeMatch[1] : "N/A",
+      username: "N/A",
+    },
+    total_records: 0,
+    records: [],
+    owner: "SABIR7718",
+  };
+}
+
+function normalizeJsonRecords(raw) {
+  if (!raw || !Array.isArray(raw.records)) return null;
+
+  return {
+    status: "success",
+    query_type: "num",
+    input: raw.number || (active ? active.input : null),
+    total_records: raw.total || raw.records.length,
+    records: raw.records.map((r, i) => ({
+      record_no: r.record_no || i + 1,
+      mobile: r.mobile || r.number || "N/A",
+      name: r.name || "N/A",
+      truecaller_name: r.truecaller_name || "N/A",
+      father_name: r.father_name || r.father || "N/A",
+      address: r.address || "N/A",
+      circle: r.circle || "N/A",
+      alternate: r.alternate || r.alt_number || "N/A",
+      id: r.id || r.aadhaar || "N/A",
+      email: r.email || "N/A",
+    })),
+    owner: "SABIR7718",
+  };
+}
+
+/* ─── queue processor ─────────────────────────────────────── */
+
+async function processQueue() {
+  if (locked || queue.length === 0) return;
+  locked = true;
+
+  active = queue.shift();
+  active.replies = [];
+  active.files = [];
+  active.rawMessages = [];
+  active.stage = "waiting_first";
+
+  log("info", "QUEUE", `Processing ${active.input} (${active.type})`);
+
+  try {
+    await sendCommand(active.command);
+  } catch (e) {
+    log("error", "SEND", e.message);
+    active.res.status(500).json({
+      status: "error",
+      message: "failed to send command to bot",
+    });
+    active = null;
+    locked = false;
+    processQueue();
+    return;
+  }
+
+  active.timeout = setTimeout(() => {
+    if (!active) return;
+    log("warn", "TIMEOUT", active.input);
+
+    const allText = active.replies.join("\n");
+    if (active.type === "num") {
+      const scraped = parseNumText(allText);
+      if (scraped.length) {
+        active.res.json({
+          status: "success",
+          query_type: "num",
+          input: active.input,
+          total_records: scraped.length,
+          records: scraped,
+          owner: "SABIR7718",
+          note: "partial (timeout before full json)",
         });
-
-        S7_ACTIVE_REQUEST = null;
-
-        S7_QUEUE_LOCK = false;
-
-        S7_PROCESS_QUEUE();
+      } else {
+        active.res.status(404).json({
+          status: "error",
+          error: "timeout",
+          message: `No result for ${active.input}`,
+        });
+      }
+    } else {
+      const tg = parseTgText(allText);
+      if (tg) active.res.json(tg);
+      else
+        active.res.status(404).json({
+          status: "error",
+          error: "timeout",
+          message: `No result for ${active.input}`,
+        });
     }
+
+    active = null;
+    locked = false;
+    processQueue();
+  }, 45000);
 }
+
+/* ─── message handler ─────────────────────────────────────── */
+
+async function onMessage(event) {
+  const msg = event.message;
+  if (!msg || msg.out || !active) return;
+
+  try {
+    const sender = await client.getEntity(msg.peerId);
+    const uname = (sender.username || "").toLowerCase();
+    if (uname !== BOT_USERNAME.toLowerCase()) return;
+
+    if (msg.message) {
+      active.replies.push(msg.message);
+      active.rawMessages.push(msg);
+    }
+
+    // ── TG lookup ──
+    if (active.type === "tg") {
+      const combined = active.replies.join("\n");
+      if (/TG\s*ID|telegram[_\s]?id|🆔/i.test(combined)) {
+        clearTimeout(active.timeout);
+        const parsed = parseTgText(combined);
+        if (parsed) active.res.json(parsed);
+        else
+          active.res.status(404).json({
+            status: "error",
+            error: "not_found",
+            message: `No result for ${active.input}`,
+          });
+        active = null;
+        locked = false;
+        processQueue();
+      }
+      return;
+    }
+
+    // ── NUM lookup ──
+    if (active.type !== "num") return;
+
+    const isReport =
+      /NUMBER\s*INFO|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|RECORD\s*\d|Rᴇᴄᴏʀᴅ\s*\d|Records\s*:/i.test(
+        msg.message || ""
+      );
+
+    if (isReport && active.stage === "waiting_first") {
+      log("info", "BOT", "First report received");
+
+      let safety = 0;
+      while (safety < 8) {
+        safety++;
+        await sleep(800);
+
+        const history = await client.getMessages(await getBotEntity(), {
+          limit: 3,
+        });
+        const latest = history.find((m) => !m.out) || history[0];
+        if (!latest) break;
+
+        const labels = buttonLabels(latest).map((l) => l.toLowerCase());
+        log("info", "BTN", `labels: ${labels.join(" | ")}`);
+
+        if (labels.some((l) => l.includes("download") || l.includes("json"))) {
+          const clicked = await clickButton(latest, "download");
+          if (!clicked) await clickButton(latest, "json");
+          active.stage = "waiting_json";
+          log("info", "BOT", "Clicked Download Json, waiting for file");
+          break;
+        }
+
+        if (labels.some((l) => l.includes("next"))) {
+          await clickButton(latest, "next");
+          active.stage = "clicking_next";
+          log("info", "BOT", "Clicked Next");
+          await sleep(1200);
+          continue;
+        }
+
+        break;
+      }
+
+      if (active.stage !== "waiting_json") {
+        await sleep(1500);
+        const scraped = parseNumText(active.replies.join("\n"));
+        if (scraped.length) {
+          clearTimeout(active.timeout);
+          active.res.json({
+            status: "success",
+            query_type: "num",
+            input: active.input,
+            total_records: scraped.length,
+            records: scraped,
+            owner: "SABIR7718",
+            note: "scraped (no download button)",
+          });
+          active = null;
+          locked = false;
+          processQueue();
+        }
+      }
+      return;
+    }
+
+    // file arrived after Download click
+    if (msg.document && active.stage === "waiting_json") {
+      try {
+        const buffer = await client.downloadMedia(msg, {});
+        const fileName = (
+          msg.document.attributes?.find(
+            (a) => a.className === "DocumentAttributeFilename"
+          )?.fileName || ""
+        ).toLowerCase();
+
+        log("info", "FILE", `Received: ${fileName || "unnamed"}`);
+
+        const queryDigits = String(active.input).replace(/\D/g, "");
+        const nameOk =
+          !fileName ||
+          fileName.includes(queryDigits) ||
+          fileName.endsWith(".json") ||
+          fileName.includes("record");
+
+        if (!nameOk) {
+          log("warn", "FILE", "Filename mismatch, ignoring");
+          return;
+        }
+
+        const text = buffer.toString("utf-8");
+        let raw;
+        try {
+          raw = JSON.parse(text);
+        } catch {
+          log("error", "FILE", "Invalid JSON in file");
+          return;
+        }
+
+        const normalized = normalizeJsonRecords(raw);
+        clearTimeout(active.timeout);
+
+        if (normalized) {
+          active.res.json(normalized);
+        } else {
+          active.res.status(404).json({
+            status: "error",
+            error: "parse_failed",
+            message: `Could not parse file for ${active.input}`,
+          });
+        }
+
+        active = null;
+        locked = false;
+        processQueue();
+      } catch (err) {
+        log("error", "FILE", err.message);
+      }
+    }
+  } catch (err) {
+    log("error", "HANDLER", err.message);
+  }
+}
+
+/* ─── boot ────────────────────────────────────────────────── */
 
 (async () => {
+  await client.start({
+    phoneNumber: async () =>
+      new Promise((resolve) => rl.question("Enter Number : ", resolve)),
+    password: async () =>
+      new Promise((resolve) => rl.question("Enter 2FA Password : ", resolve)),
+    phoneCode: async () =>
+      new Promise((resolve) => rl.question("Enter OTP : ", resolve)),
+    onError: (e) => log("error", "LOGIN", e.message),
+  });
 
-    log(
-        "info",
-        "SYSTEM",
-        "Connecting Telegram Client..."
-    );
+  log("info", "SYSTEM", "Telegram Client Connected");
+  log("info", "SYSTEM", `Target bot/group user: @${BOT_USERNAME}`);
 
-    await SABIR7718_CLIENT.start({
+  client.addEventHandler(onMessage, new NewMessage({}));
 
-        phoneNumber: async () =>
-            new Promise((resolve) =>
-                HaTe_READLINE.question(
-                    "Enter Number : ",
-                    resolve
-                )
-            ),
+  app.get("/search", (req, res) => {
+    const { type, query } = req.query;
 
-        password: async () =>
-            new Promise((resolve) =>
-                HaTe_READLINE.question(
-                    "Enter 2FA Password : ",
-                    resolve
-                )
-            ),
+    if (!type || !query) {
+      return res.status(400).json({
+        status: "error",
+        message: "Missing query params",
+      });
+    }
 
-        phoneCode: async () =>
-            new Promise((resolve) =>
-                HaTe_READLINE.question(
-                    "Enter OTP : ",
-                    resolve
-                )
-            ),
+    let command = "";
+    if (type === "num") {
+      command = `/num ${query}`;
+    } else if (type === "tg") {
+      command = `/tgid ${query}`;
+    } else {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid type — use num or tg",
+      });
+    }
 
-        onError: (S7_ERROR) => {
-            log(
-                "error",
-                "LOGIN",
-                S7_ERROR.message
-            );
-        },
+    const id =
+      Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+
+    queue.push({
+      id,
+      res,
+      type,
+      input: query,
+      command,
+      replies: [],
+      files: [],
+      rawMessages: [],
+      timeout: null,
+      stage: "waiting_first",
     });
 
-    log(
-        "info",
-        "SYSTEM",
-        "Telegram Client Connected"
-    );
+    log("info", "API", `Queued -> ${query} (${type})`);
+    processQueue();
+  });
 
-    SABIR7718_CLIENT.addEventHandler(
-        async (S7_EVENT) => {
-            const SYHaTe_MESSAGE = S7_EVENT.message;
-
-            if (
-                !SYHaTe_MESSAGE.out &&
-                SYHaTe_MESSAGE.peerId &&
-                S7_ACTIVE_REQUEST
-            ) {
-                try {
-                    const S7_SENDER = await SABIR7718_CLIENT.getEntity(
-                        SYHaTe_MESSAGE.peerId
-                    );
-
-                    if (
-                        S7_SENDER.username &&
-                        S7_SENDER.username.toLowerCase() ===
-                        S7_TARGET_BOT.toLowerCase()
-                    ) {
-                        if (SYHaTe_MESSAGE.message) {
-                            S7_ACTIVE_REQUEST.replies.push(SYHaTe_MESSAGE.message);
-                        }
-
-                        if (SYHaTe_MESSAGE.document) {
-                            try {
-                                const buffer = await SABIR7718_CLIENT.downloadMedia(
-                                    SYHaTe_MESSAGE,
-                                    {}
-                                );
-
-                                const fileText = buffer.toString("utf-8");
-                                S7_ACTIVE_REQUEST.replies.push(fileText);
-
-                                log("info", "FILE", "File downloaded & parsed");
-                            } catch (err) {
-                                log("error", "FILE", err.message);
-                            }
-                        }
-
-                        const bestReply = S7_ACTIVE_REQUEST.replies.reduce(
-                            (a, b) => (a.length > b.length ? a : b),
-                            ""
-                        );
-
-                        const hasReport =
-                            /RECORD\s*#\d+/i.test(bestReply) ||
-                            /MOBILE_INFO\s*INTELLIGENCE/i.test(bestReply) ||
-                            /📄\s*Result\s*:/i.test(bestReply) ||
-                            /telegram_id|Result\s*:/i.test(bestReply);
-
-                        if (hasReport) {
-                            clearTimeout(S7_ACTIVE_REQUEST.timeout);
-
-                            const S7_FORMATTED = SYHaTe_PARSE_RESPONSE(
-                                bestReply,
-                                "",
-                                S7_ACTIVE_REQUEST.type,
-                                S7_ACTIVE_REQUEST.input
-                            );
-
-                            if (S7_FORMATTED) {
-                                S7_ACTIVE_REQUEST.res.json(S7_FORMATTED);
-                            } else {
-                                S7_ACTIVE_REQUEST.res.status(404).json({
-                                    status: "error",
-                                    error: "not_found",
-                                    message: `No result for ${S7_ACTIVE_REQUEST.input}`,
-                                });
-                            }
-
-                            S7_ACTIVE_REQUEST = null;
-                            S7_QUEUE_LOCK = false;
-                            S7_PROCESS_QUEUE();
-                        }
-                    }
-                } catch (S7_ERROR) {
-                    log(
-                        "error",
-                        "HANDLER",
-                        S7_ERROR.message
-                    );
-                }
-            }
-        },
-        new NewMessage({})
-    );
-
-    S7HaTeSY_APP.get("/search", (req, res) => {
-
-        const {
-            type,
-            query,
-        } = req.query;
-
-        if (!type || !query) {
-
-            return res.status(400).json({
-                status: "error",
-                message: "Missing query params",
-            });
-        }
-
-        let S7_COMMAND = "";
-
-        if (type === "num") {
-
-            S7_COMMAND = `/num ${query}`;
-
-        } else if (type === "tg") {
-
-            S7_COMMAND = `/tgnum ${query}`;
-
-        } else {
-
-            return res.status(400).json({
-                status: "error",
-                message: "Invalid type use num/tgnum",
-            });
-        }
-
-        const SABIR7718_REQUEST_ID =
-            Date.now() +
-            "_" +
-            Math.random()
-            .toString(36)
-            .slice(2, 7);
-
-        SABIR7718_QUEUE.push({
-            id: SABIR7718_REQUEST_ID,
-            res,
-            type,
-            input: query,
-            command: S7_COMMAND,
-            replies: [],
-            timeout: null,
-        });
-
-        log(
-            "info",
-            "API",
-            `Queued -> ${query}`
-        );
-
-        S7_PROCESS_QUEUE();
-    });
-
-    S7HaTeSY_APP.listen(S7_PORT, () => {
-
-        log(
-            "info",
-            "SERVER",
-            `Running On Port ${S7_PORT}`
-        );
-    });
-
+  app.listen(PORT, () => {
+    log("info", "SERVER", `Running on port ${PORT}`);
+  });
 })();
 
-const S7_START_TIME = Date.now();
+/* ─── health + keep-alive ─────────────────────────────────── */
 
-S7HaTeSY_APP.get("/", async (req, res) => {
+const START = Date.now();
 
-    const S7_UPTIME_SECONDS =
-        Math.floor(
-            (Date.now() - S7_START_TIME) / 1000
-        );
+app.get("/", (_req, res) => {
+  const up = Math.floor((Date.now() - START) / 1000);
+  const h = Math.floor(up / 3600);
+  const m = Math.floor((up % 3600) / 60);
+  const s = up % 60;
 
-    const S7_HOURS =
-        Math.floor(S7_UPTIME_SECONDS / 3600);
-
-    const S7_MINUTES =
-        Math.floor(
-            (S7_UPTIME_SECONDS % 3600) / 60
-        );
-
-    const S7_SECONDS =
-        S7_UPTIME_SECONDS % 60;
-
-    res.json({
-        status: "online",
-
-        service: "S7 Info Bridge",
-
-        developer: {
-            name: "SABIR7718"
-        },
-
-        uptime: {
-            seconds: S7_UPTIME_SECONDS,
-            formatted: `${S7_HOURS}h ${S7_MINUTES}m ${S7_SECONDS}s`,
-        },
-
-        usage: {
-            number_lookup: "/search?type=num&query=919876543210",
-
-            telegram_lookup: "/search?type=tg&query=username",
-        },
-
-        queue: {
-            pending: SABIR7718_QUEUE.length,
-            processing: S7_ACTIVE_REQUEST ?
-                true : false,
-        },
-
-        server: {
-            port: S7_PORT,
-            node: process.version,
-        }
-
-    });
-
+  res.json({
+    status: "online",
+    service: "S7 Info Bridge",
+    developer: { name: "SABIR7718" },
+    target: `@${BOT_USERNAME}`,
+    uptime: {
+      seconds: up,
+      formatted: `${h}h ${m}m ${s}s`,
+    },
+    usage: {
+      number_lookup: "/search?type=num&query=9002556353",
+      telegram_lookup: "/search?type=tg&query=sabir7718",
+    },
+    queue: {
+      pending: queue.length,
+      processing: !!active,
+    },
+    server: {
+      port: PORT,
+      node: process.version,
+    },
+  });
 });
 
 if (process.env.URL) {
-
-    (async () => {
-        try {
-            const res = await fetch(process.env.URL);
-            log('info', 'PING', `Pinged: ${process.env.URL} | Status: ${res.status}`);
-        } catch (err) {
-            log('error', 'PING', err.message);
-        }
-    })();
-
-    setInterval(async () => {
-        try {
-            const res = await fetch(process.env.URL);
-            log('info', 'PING', `Pinged: ${process.env.URL} | Status: ${res.status}`);
-        } catch (err) {
-            log('error', 'PING', err.message);
-        }
-    }, 5 * 60 * 1000);
+  const ping = async () => {
+    try {
+      const r = await fetch(process.env.URL);
+      log("info", "PING", `Pinged ${process.env.URL} | ${r.status}`);
+    } catch (e) {
+      log("error", "PING", e.message);
+    }
+  };
+  ping();
+  setInterval(ping, 5 * 60 * 1000);
 }
