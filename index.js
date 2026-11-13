@@ -201,22 +201,31 @@ function parseNumText(text) {
 function parseTgText(text) {
   if (!text) return null;
 
+  // screenshot format (plain + fancy):
+  // TG ID : 6051143430
+  // PHONE : 7365085213
+  // COUNTRY : India
+  // COUNTRY CODE : +91
   const idMatch =
     text.match(/TG\s*ID\s*:?\s*(\d{6,15})/i) ||
     text.match(/🆔\s*TG\s*ID\s*:?\s*(\d{6,15})/i) ||
-    text.match(/telegram[_\s]?id\s*:?\s*(\d{6,15})/i);
+    text.match(/telegram[_\s]?id\s*:?\s*(\d{6,15})/i) ||
+    text.match(/TGID\s*:?\s*(\d{6,15})/i);
 
   const phoneMatch =
-    text.match(/Pʜᴏɴᴇ\s*:?\s*(\+?\d{8,15})/i) ||
-    text.match(/Phone\s*:?\s*(\+?\d{8,15})/i);
+    text.match(/PHONE\s*:?\s*(\+?\d{8,15})/i) ||
+    text.match(/Phone\s*:?\s*(\+?\d{8,15})/i) ||
+    text.match(/Pʜᴏɴᴇ\s*:?\s*(\+?\d{8,15})/i);
 
   const countryMatch =
-    text.match(/Cᴏᴜɴᴛʀʏ\s*:?\s*(.+?)(?:\n|$)/i) ||
-    text.match(/Country\s*:?\s*(.+?)(?:\n|$)/i);
+    text.match(/COUNTRY\s*:?\s*(.+?)(?:\n|$)/i) ||
+    text.match(/Country\s*:?\s*(.+?)(?:\n|$)/i) ||
+    text.match(/Cᴏᴜɴᴛʀʏ\s*:?\s*(.+?)(?:\n|$)/i);
 
   const codeMatch =
-    text.match(/Cᴏᴜɴᴛʀʏ\s*Cᴏᴅᴇ\s*:?\s*(\+?\d+)/i) ||
-    text.match(/Country\s*Code\s*:?\s*(\+?\d+)/i);
+    text.match(/COUNTRY\s*CODE\s*:?\s*(\+?\d+)/i) ||
+    text.match(/Country\s*Code\s*:?\s*(\+?\d+)/i) ||
+    text.match(/Cᴏᴜɴᴛʀʏ\s*Cᴏᴅᴇ\s*:?\s*(\+?\d+)/i);
 
   if (!idMatch) return null;
 
@@ -313,7 +322,6 @@ async function processQueue() {
     return;
   }
 
-  // 60s — file can arrive after the click
   active.timeout = setTimeout(() => {
     if (!active) return;
     log("warn", "TIMEOUT", active.input);
@@ -359,27 +367,46 @@ async function onMessage(event) {
   if (!msg || msg.out || !active) return;
 
   try {
-    const sender = await client.getEntity(msg.peerId);
-    const uname = (sender.username || "").toLowerCase();
-    if (uname !== BOT_USERNAME.toLowerCase()) return;
+    // Accept messages from the target chat/bot OR any message that
+    // looks like a report (group bots often post as themselves /
+    // different usernames). Filter by content when username differs.
+    let fromTarget = false;
+    try {
+      const sender = await client.getEntity(msg.peerId);
+      const uname = (sender.username || "").toLowerCase();
+      const title = (sender.title || "").toLowerCase();
+      if (
+        uname === BOT_USERNAME.toLowerCase() ||
+        title.includes("posing") ||
+        title.includes("osint")
+      ) {
+        fromTarget = true;
+      }
+    } catch (_) {}
 
-    if (msg.message) {
-      active.replies.push(msg.message);
+    const text = msg.message || "";
+    const looksLikeReport =
+      /TELEGRAM\s*INFO|NUMBER\s*INFO|TG\s*ID|RECORD\s*\d|Rᴇᴄᴏʀᴅ|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|QUERY\s*:/i.test(
+        text
+      ) || !!msg.document;
+
+    if (!fromTarget && !looksLikeReport) return;
+
+    if (text) {
+      active.replies.push(text);
       active.rawMessages.push(msg);
+      log("info", "MSG", text.slice(0, 120).replace(/\n/g, " | "));
     }
 
     // ── TG lookup ──
     if (active.type === "tg") {
       const combined = active.replies.join("\n");
-      if (/TG\s*ID|telegram[_\s]?id|🆔/i.test(combined)) {
+      if (/TG\s*ID|TELEGRAM\s*INFO|telegram[_\s]?id|🆔/i.test(combined)) {
         const parsed = parseTgText(combined);
-        if (parsed) finishOk(parsed);
-        else
-          finishErr(404, {
-            status: "error",
-            error: "not_found",
-            message: `No result for ${active.input}`,
-          });
+        if (parsed) {
+          log("info", "TG", `parsed id=${parsed.telegram_info.telegram_id}`);
+          finishOk(parsed);
+        }
       }
       return;
     }
@@ -420,10 +447,10 @@ async function onMessage(event) {
           return;
         }
 
-        const text = buffer.toString("utf-8");
+        const body = buffer.toString("utf-8");
         let raw;
         try {
-          raw = JSON.parse(text);
+          raw = JSON.parse(body);
         } catch (e) {
           log("error", "FILE", "Invalid JSON: " + e.message);
           return;
@@ -448,7 +475,7 @@ async function onMessage(event) {
     // first report → start navigating buttons
     const isReport =
       /NUMBER\s*INFO|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|RECORD\s*\d|Rᴇᴄᴏʀᴅ\s*\d|Records\s*:|Rᴇᴄᴏʀᴅꜱ/i.test(
-        msg.message || ""
+        text
       );
 
     if (isReport && active.stage === "waiting_first") {
@@ -499,7 +526,6 @@ async function onMessage(event) {
               continue;
             }
 
-            // last page indicator (e.g. 2/2) — wait a bit more for download
             if (
               labels.some((l) =>
                 /^\d+\s*\/\s*\d+$/.test(l.replace(/\s/g, ""))
