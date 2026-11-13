@@ -26,7 +26,13 @@
 
 const { TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
-const { NewMessage, EditedMessage } = require("telegram/events");
+const { NewMessage, Raw } = require("telegram/events");
+let EditedMessage;
+try {
+  EditedMessage = require("telegram/events/EditedMessage").EditedMessage;
+} catch (_) {
+  EditedMessage = null;
+}
 const { Api } = require("telegram");
 const express = require("express");
 const readline = require("readline");
@@ -605,8 +611,29 @@ async function onMessage(event) {
   log("info", "SYSTEM", `Target bot/group user: @${BOT_USERNAME}`);
 
   client.addEventHandler(onMessage, new NewMessage({}));
+
   // bot edits the same "Searching..." message into the final result
-  client.addEventHandler(onMessage, new EditedMessage({}));
+  if (EditedMessage) {
+    client.addEventHandler(onMessage, new EditedMessage({}));
+    log("info", "SYSTEM", "EditedMessage handler attached");
+  } else {
+    // fallback: catch edit updates via Raw
+    client.addEventHandler(async (update) => {
+      try {
+        if (
+          update &&
+          (update.className === "UpdateEditMessage" ||
+            update.className === "UpdateEditChannelMessage") &&
+          update.message
+        ) {
+          await onMessage({ message: update.message });
+        }
+      } catch (e) {
+        log("error", "RAW_EDIT", e.message);
+      }
+    }, new Raw({}));
+    log("info", "SYSTEM", "Raw edit handler attached (EditedMessage missing)");
+  }
 
   app.get("/search", (req, res) => {
     const { type, query } = req.query;
