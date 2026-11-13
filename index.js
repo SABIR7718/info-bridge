@@ -72,7 +72,7 @@ async function sendCommand(cmd) {
 }
 
 async function clickButton(message, buttonText) {
-  if (!message.replyMarkup || !message.replyMarkup.rows) return false;
+  if (!message || !message.replyMarkup || !message.replyMarkup.rows) return false;
 
   for (const row of message.replyMarkup.rows) {
     for (const btn of row.buttons) {
@@ -89,7 +89,7 @@ async function clickButton(message, buttonText) {
           return true;
         } catch (e) {
           log("warn", "BTN", e.message);
-          return false;
+          return true;
         }
       }
     }
@@ -97,12 +97,8 @@ async function clickButton(message, buttonText) {
   return false;
 }
 
-function hasButtons(message) {
-  return !!(message.replyMarkup && message.replyMarkup.rows);
-}
-
 function buttonLabels(message) {
-  if (!hasButtons(message)) return [];
+  if (!message || !message.replyMarkup || !message.replyMarkup.rows) return [];
   const labels = [];
   for (const row of message.replyMarkup.rows) {
     for (const btn of row.buttons) {
@@ -114,35 +110,88 @@ function buttonLabels(message) {
 
 /* ─── parsers ─────────────────────────────────────────────── */
 
+function safeMatch(text, patterns) {
+  if (!text) return null;
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m && m[1] != null) return String(m[1]).trim();
+  }
+  return null;
+}
+
 function parseNumText(text) {
+  if (!text) return [];
   const records = [];
-  const blocks = text.split(/📰\s*Rᴇᴄᴏʀᴅ\s*\d+\/\d+|📰\s*RECORD\s*\d+\/\d+/i).slice(1);
+
+  const blocks = text.split(
+    /📰\s*R[ᴇe][ᴄc][ᴏo][ʀr][ᴅd]\s*\d+\s*\/\s*\d+|RECORD\s*\d+\s*\/\s*\d+/i
+  ).slice(1);
 
   for (const block of blocks) {
-    const get = (label) => {
-      const re = new RegExp(label + "\\s*:\\s*(.+?)(?:\\n|$)", "i");
-      const m = block.match(re);
-      return m ? m[1].trim() : "N/A";
-    };
+    if (!block) continue;
 
-    const mobile = get("Nᴜᴍʙᴇʀ|Number|MOBILE");
-    const name = get("Nᴀᴍᴇ|Name");
-    const father = get("Fᴀᴛʜᴇʀ|Father");
-    const alt = get("Aʟᴛ\\s*Nᴜᴍ|Alt");
-    const circle = get("Cɪʀᴄʟᴇ|Circle");
-    const address = get("Aᴅᴅʀᴇꜱꜱ|Address");
-    const id = get("Iᴅ|ID|Aadhaar");
+    const mobile =
+      safeMatch(block, [
+        /Nᴜᴍʙᴇʀ\s*:\s*(.+?)(?:\n|$)/i,
+        /Number\s*:\s*(.+?)(?:\n|$)/i,
+        /NUMBER\s*:\s*(.+?)(?:\n|$)/i,
+        /MOBILE\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
+
+    const name =
+      safeMatch(block, [
+        /Nᴀᴍᴇ\s*:\s*(.+?)(?:\n|$)/i,
+        /Name\s*:\s*(.+?)(?:\n|$)/i,
+        /NAME\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
+
+    const father =
+      safeMatch(block, [
+        /Fᴀᴛʜᴇʀ\s*:\s*(.+?)(?:\n|$)/i,
+        /Father\s*:\s*(.+?)(?:\n|$)/i,
+        /FATHER\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
+
+    const alt =
+      safeMatch(block, [
+        /Aʟᴛ\s*Nᴜᴍ\s*:\s*(.+?)(?:\n|$)/i,
+        /Alt\s*Num\s*:\s*(.+?)(?:\n|$)/i,
+        /ALT\s*NUM\s*:\s*(.+?)(?:\n|$)/i,
+        /Alternate\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
+
+    const circle =
+      safeMatch(block, [
+        /Cɪʀᴄʟᴇ\s*:\s*(.+?)(?:\n|$)/i,
+        /Circle\s*:\s*(.+?)(?:\n|$)/i,
+        /CIRCLE\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
+
+    const address =
+      safeMatch(block, [
+        /Aᴅᴅʀᴇꜱꜱ\s*:\s*(.+?)(?:\n|$)/i,
+        /Address\s*:\s*(.+?)(?:\n|$)/i,
+        /ADDRESS\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
+
+    const id =
+      safeMatch(block, [
+        /Iᴅ\s*:\s*(.+?)(?:\n|$)/i,
+        /Id\s*:\s*(.+?)(?:\n|$)/i,
+        /ID\s*:\s*(.+?)(?:\n|$)/i,
+        /Aadhaar\s*:\s*(.+?)(?:\n|$)/i,
+      ]) || "N/A";
 
     if (name === "N/A" && mobile === "N/A") continue;
 
     records.push({
-      mobile: mobile || "N/A",
-      name: name || "N/A",
-      father_name: father || "N/A",
-      address: address || "N/A",
-      circle: circle || "N/A",
-      alternate: alt || "N/A",
-      id: id || "N/A",
+      mobile,
+      name,
+      father_name: father,
+      address,
+      circle,
+      alternate: alt,
+      id,
       email: "N/A",
     });
   }
@@ -150,6 +199,8 @@ function parseNumText(text) {
 }
 
 function parseTgText(text) {
+  if (!text) return null;
+
   const idMatch =
     text.match(/TG\s*ID\s*:?\s*(\d{6,15})/i) ||
     text.match(/🆔\s*TG\s*ID\s*:?\s*(\d{6,15})/i) ||
@@ -210,6 +261,34 @@ function normalizeJsonRecords(raw) {
   };
 }
 
+/* ─── finish helpers ──────────────────────────────────────── */
+
+function finishOk(payload) {
+  if (!active) return;
+  try {
+    clearTimeout(active.timeout);
+  } catch (_) {}
+  try {
+    active.res.json(payload);
+  } catch (_) {}
+  active = null;
+  locked = false;
+  processQueue();
+}
+
+function finishErr(status, body) {
+  if (!active) return;
+  try {
+    clearTimeout(active.timeout);
+  } catch (_) {}
+  try {
+    active.res.status(status).json(body);
+  } catch (_) {}
+  active = null;
+  locked = false;
+  processQueue();
+}
+
 /* ─── queue processor ─────────────────────────────────────── */
 
 async function processQueue() {
@@ -218,7 +297,6 @@ async function processQueue() {
 
   active = queue.shift();
   active.replies = [];
-  active.files = [];
   active.rawMessages = [];
   active.stage = "waiting_first";
 
@@ -228,25 +306,24 @@ async function processQueue() {
     await sendCommand(active.command);
   } catch (e) {
     log("error", "SEND", e.message);
-    active.res.status(500).json({
+    finishErr(500, {
       status: "error",
       message: "failed to send command to bot",
     });
-    active = null;
-    locked = false;
-    processQueue();
     return;
   }
 
+  // 60s — file can arrive after the click
   active.timeout = setTimeout(() => {
     if (!active) return;
     log("warn", "TIMEOUT", active.input);
 
-    const allText = active.replies.join("\n");
+    const allText = (active.replies || []).join("\n");
+
     if (active.type === "num") {
       const scraped = parseNumText(allText);
       if (scraped.length) {
-        active.res.json({
+        finishOk({
           status: "success",
           query_type: "num",
           input: active.input,
@@ -256,7 +333,7 @@ async function processQueue() {
           note: "partial (timeout before full json)",
         });
       } else {
-        active.res.status(404).json({
+        finishErr(404, {
           status: "error",
           error: "timeout",
           message: `No result for ${active.input}`,
@@ -264,19 +341,15 @@ async function processQueue() {
       }
     } else {
       const tg = parseTgText(allText);
-      if (tg) active.res.json(tg);
+      if (tg) finishOk(tg);
       else
-        active.res.status(404).json({
+        finishErr(404, {
           status: "error",
           error: "timeout",
           message: `No result for ${active.input}`,
         });
     }
-
-    active = null;
-    locked = false;
-    processQueue();
-  }, 45000);
+  }, 60000);
 }
 
 /* ─── message handler ─────────────────────────────────────── */
@@ -299,18 +372,14 @@ async function onMessage(event) {
     if (active.type === "tg") {
       const combined = active.replies.join("\n");
       if (/TG\s*ID|telegram[_\s]?id|🆔/i.test(combined)) {
-        clearTimeout(active.timeout);
         const parsed = parseTgText(combined);
-        if (parsed) active.res.json(parsed);
+        if (parsed) finishOk(parsed);
         else
-          active.res.status(404).json({
+          finishErr(404, {
             status: "error",
             error: "not_found",
             message: `No result for ${active.input}`,
           });
-        active = null;
-        locked = false;
-        processQueue();
       }
       return;
     }
@@ -318,78 +387,22 @@ async function onMessage(event) {
     // ── NUM lookup ──
     if (active.type !== "num") return;
 
-    const isReport =
-      /NUMBER\s*INFO|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|RECORD\s*\d|Rᴇᴄᴏʀᴅ\s*\d|Records\s*:/i.test(
-        msg.message || ""
-      );
-
-    if (isReport && active.stage === "waiting_first") {
-      log("info", "BOT", "First report received");
-
-      let safety = 0;
-      while (safety < 8) {
-        safety++;
-        await sleep(800);
-
-        const history = await client.getMessages(await getBotEntity(), {
-          limit: 3,
-        });
-        const latest = history.find((m) => !m.out) || history[0];
-        if (!latest) break;
-
-        const labels = buttonLabels(latest).map((l) => l.toLowerCase());
-        log("info", "BTN", `labels: ${labels.join(" | ")}`);
-
-        if (labels.some((l) => l.includes("download") || l.includes("json"))) {
-          const clicked = await clickButton(latest, "download");
-          if (!clicked) await clickButton(latest, "json");
-          active.stage = "waiting_json";
-          log("info", "BOT", "Clicked Download Json, waiting for file");
-          break;
-        }
-
-        if (labels.some((l) => l.includes("next"))) {
-          await clickButton(latest, "next");
-          active.stage = "clicking_next";
-          log("info", "BOT", "Clicked Next");
-          await sleep(1200);
-          continue;
-        }
-
-        break;
-      }
-
-      if (active.stage !== "waiting_json") {
-        await sleep(1500);
-        const scraped = parseNumText(active.replies.join("\n"));
-        if (scraped.length) {
-          clearTimeout(active.timeout);
-          active.res.json({
-            status: "success",
-            query_type: "num",
-            input: active.input,
-            total_records: scraped.length,
-            records: scraped,
-            owner: "SABIR7718",
-            note: "scraped (no download button)",
-          });
-          active = null;
-          locked = false;
-          processQueue();
-        }
-      }
-      return;
-    }
-
-    // file arrived after Download click
-    if (msg.document && active.stage === "waiting_json") {
+    // accept JSON file at any stage
+    if (msg.document) {
       try {
         const buffer = await client.downloadMedia(msg, {});
-        const fileName = (
-          msg.document.attributes?.find(
-            (a) => a.className === "DocumentAttributeFilename"
-          )?.fileName || ""
-        ).toLowerCase();
+        let fileName = "";
+        try {
+          const attr = (msg.document.attributes || []).find(
+            (a) =>
+              a.className === "DocumentAttributeFilename" ||
+              a.fileName
+          );
+          fileName = (
+            (attr && (attr.fileName || attr.file_name)) ||
+            ""
+          ).toLowerCase();
+        } catch (_) {}
 
         log("info", "FILE", `Received: ${fileName || "unnamed"}`);
 
@@ -398,7 +411,9 @@ async function onMessage(event) {
           !fileName ||
           fileName.includes(queryDigits) ||
           fileName.endsWith(".json") ||
-          fileName.includes("record");
+          fileName.includes("result") ||
+          fileName.includes("record") ||
+          fileName.includes("num");
 
         if (!nameOk) {
           log("warn", "FILE", "Filename mismatch, ignoring");
@@ -409,30 +424,97 @@ async function onMessage(event) {
         let raw;
         try {
           raw = JSON.parse(text);
-        } catch {
-          log("error", "FILE", "Invalid JSON in file");
+        } catch (e) {
+          log("error", "FILE", "Invalid JSON: " + e.message);
           return;
         }
 
         const normalized = normalizeJsonRecords(raw);
-        clearTimeout(active.timeout);
-
         if (normalized) {
-          active.res.json(normalized);
+          finishOk(normalized);
         } else {
-          active.res.status(404).json({
+          finishErr(404, {
             status: "error",
             error: "parse_failed",
             message: `Could not parse file for ${active.input}`,
           });
         }
-
-        active = null;
-        locked = false;
-        processQueue();
       } catch (err) {
         log("error", "FILE", err.message);
       }
+      return;
+    }
+
+    // first report → start navigating buttons
+    const isReport =
+      /NUMBER\s*INFO|Nᴜᴍʙᴇʀ\s*Iɴꜰᴏ|RECORD\s*\d|Rᴇᴄᴏʀᴅ\s*\d|Records\s*:|Rᴇᴄᴏʀᴅꜱ/i.test(
+        msg.message || ""
+      );
+
+    if (isReport && active.stage === "waiting_first") {
+      log("info", "BOT", "First report received");
+      active.stage = "navigating";
+
+      (async () => {
+        try {
+          let safety = 0;
+          while (active && safety < 10) {
+            safety++;
+            await sleep(900);
+
+            const history = await client.getMessages(await getBotEntity(), {
+              limit: 5,
+            });
+            const latest =
+              history.find((m) => !m.out && m.replyMarkup) ||
+              history.find((m) => !m.out) ||
+              history[0];
+
+            if (!latest) continue;
+
+            const labels = buttonLabels(latest).map((l) =>
+              (l || "").toLowerCase()
+            );
+            log("info", "BTN", `labels: ${labels.join(" | ")}`);
+
+            if (
+              labels.some(
+                (l) => l.includes("download") || l.includes("json")
+              )
+            ) {
+              const ok =
+                (await clickButton(latest, "download")) ||
+                (await clickButton(latest, "json"));
+              if (ok) {
+                active.stage = "waiting_json";
+                log("info", "BOT", "Clicked Download Json, waiting for file");
+              }
+              break;
+            }
+
+            if (labels.some((l) => l.includes("next"))) {
+              await clickButton(latest, "next");
+              log("info", "BOT", "Clicked Next");
+              await sleep(1100);
+              continue;
+            }
+
+            // last page indicator (e.g. 2/2) — wait a bit more for download
+            if (
+              labels.some((l) =>
+                /^\d+\s*\/\s*\d+$/.test(l.replace(/\s/g, ""))
+              )
+            ) {
+              await sleep(800);
+              continue;
+            }
+
+            break;
+          }
+        } catch (e) {
+          log("error", "NAV", e.message);
+        }
+      })();
     }
   } catch (err) {
     log("error", "HANDLER", err.message);
@@ -489,7 +571,6 @@ async function onMessage(event) {
       input: query,
       command,
       replies: [],
-      files: [],
       rawMessages: [],
       timeout: null,
       stage: "waiting_first",
